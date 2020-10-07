@@ -1,6 +1,5 @@
 import scipy.io
 import numpy as np
-import sys
 
 
 class SubjectData:
@@ -50,5 +49,21 @@ class SubjectData:
 
 
 if __name__ == '__main__':
+    # Test usage of SubjectData class
     s01 = SubjectData('s01.mat')
-    print(s01.srate)
+    print('sampling rate', s01.srate)
+    print('rest signal shape', s01['rest'].shape)
+    
+    # Plot electrode locations
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(s01.psenloc[:, 0], s01.psenloc[:, 1], s01.psenloc[:, 2])
+    fig.suptitle('psenloc')
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(s01.senloc[:, 0], s01.senloc[:, 1], s01.senloc[:, 2])
+    fig.suptitle('senloc')
+    plt.show()
+    print('Note the difference in scale between the plots')
+
