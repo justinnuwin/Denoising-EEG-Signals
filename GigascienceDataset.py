@@ -93,7 +93,13 @@ class SubjectData:
 
     def __generate_mne_raw(self):
         # TODO: Check if montage coord frame is actually head or if we need to give fiducials
-        montage = mne.channels.make_dig_montage({k: v for k, v in zip(self.channel_names, self.mat_senloc)}, coord_frame='head')
+        # LPA and RPA Points might be the avg between P9/10 and T7/T8 
+        senloc = self.mat_psenloc * 0.121
+        # senloc = self.mat_senloc * 0.0105    # Hmmm which one?
+        montage = mne.channels.make_dig_montage({k: v for k, v in zip(self.channel_names, senloc)},
+                                                # lpa=senloc[self.channel_names.index('P9')],   # See TODO
+                                                # rpa=senloc[self.channel_names.index('P10')],
+                                                coord_frame='head')
         channel_names_w_stim = self.channel_names.copy()
         channel_names_w_stim.append(self.stim_channel)
         channel_types_w_stim = self.channel_types.copy()
