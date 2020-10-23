@@ -96,7 +96,7 @@ class SubjectData:
         # LPA and RPA Points might be the avg between P9/10 and T7/T8 
         senloc = self.mat_psenloc * 0.121
         # senloc = self.mat_senloc * 0.0105    # Hmmm which one?
-        montage = mne.channels.make_dig_montage({k: v for k, v in zip(self.channel_names, senloc)},
+        self.montage = montage = mne.channels.make_dig_montage({k: v for k, v in zip(self.channel_names, senloc)},
                                                 # lpa=senloc[self.channel_names.index('P9')],   # See TODO
                                                 # rpa=senloc[self.channel_names.index('P10')],
                                                 coord_frame='head')
@@ -104,7 +104,7 @@ class SubjectData:
         channel_names_w_stim.append(self.stim_channel)
         channel_types_w_stim = self.channel_types.copy()
         channel_types_w_stim.append('stim')
-        info_w_stim = mne.create_info(channel_names_w_stim, self.mat_srate, channel_types_w_stim)
+        self.info_w_stim = info_w_stim = mne.create_info(channel_names_w_stim, self.mat_srate, channel_types_w_stim)
         self.raw_imagery_left = mne.io.RawArray(np.vstack((self.mat_imagery_left, self.mat_imagery_event)),
                                                 info_w_stim)
         self.raw_imagery_right = mne.io.RawArray(np.vstack((self.mat_imagery_right, self.mat_imagery_event)),
@@ -119,7 +119,7 @@ class SubjectData:
         self.raw_movement_left.set_montage(montage)
         self.raw_movement_right.set_montage(montage)
         
-        info_no_stim = mne.create_info(self.channel_names, self.mat_srate, self.channel_types)
+        self.info_no_stim = info_no_stim = mne.create_info(self.channel_names, self.mat_srate, self.channel_types)
         self.raw_rest = mne.io.RawArray(self.mat_rest, info_no_stim)
         self.raw_rest.set_montage(montage)
         orig_noise = self.mat_noise
