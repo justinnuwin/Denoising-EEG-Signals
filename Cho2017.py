@@ -11,6 +11,7 @@ class SubjectData:
 
     channel_types = ['eeg' for _ in range(64)] + ['emg' for _ in range(4)]
 
+    # Biosemi ActiveTwo system collected with the BCI2000 system 3.0.2
     # Two EMG electrodes were attached to the flexor digitorum profundus
     # and extensor digitorum on each arm.
     # FIXME: Channels 65 - 68 EMGs need to check the mapping
@@ -73,6 +74,8 @@ class SubjectData:
                 num_entries = data.shape[0]
                 entry_size = data[0][0].shape
                 self.__data[field] = np.ndarray((num_entries, *entry_size))
+                for i in range(num_entries):
+                    self.__data[field][i] = data[i][0]
             elif field == 'bad_trial_indices':  # This is a MatLab struct... TODO: Not sure how to demarshal this
                 self.__data[field] = data[0][0]
             elif field in ['srate', 'n_movement_trials', 'n_imagery_trials', 'comment', 'subject']:     # Scalar/strings
@@ -92,6 +95,18 @@ class SubjectData:
                 self.__data[field] = data
 
     def __generate_mne_raw(self):
+        """Generate MNE.Raw from EEG measurements"""
+        # Note that the original dataset gives the raw ADC valus from the Biosemi Activetwo. The conversion rate is
+        # 31.25nV/bit https://www.biosemi.com/activetwo_full_specs.htm
+        scale = 31.25e-9
+        self.mat_imagery_left = (self.mat_imagery_left - self.mat_imagery_left.mean(axis=1, keepdims=True)) * scale
+        self.mat_imagery_right = (self.mat_imagery_right - self.mat_imagery_right.mean(axis=1, keepdims=True)) * scale
+        self.mat_movement_left = (self.mat_movement_left - self.mat_movement_left.mean(axis=1, keepdims=True)) * scale
+        self.mat_movement_right = (self.mat_movement_right - self.mat_movement_right.mean(axis=1, keepdims=True)) * scale
+        self.mat_rest = (self.mat_rest - self.mat_rest.mean(axis=1, keepdims=True)) / scale
+        # Noise is 0-meaned and converted to V below
+        
+        # BCI2000 Electrode placement https://www.bci2000.org/mediawiki/index.php/User_Tutorial:EEG_Measurement_Setup
         # TODO: Check if montage coord frame is actually head or if we need to give fiducials
         # LPA and RPA Points might be the avg between P9/10 and T7/T8 
         senloc = self.mat_psenloc * 0.121
@@ -100,6 +115,7 @@ class SubjectData:
                                                 # lpa=senloc[self.channel_names.index('P9')],   # See TODO
                                                 # rpa=senloc[self.channel_names.index('P10')],
                                                 coord_frame='head')
+        # montage = mne.channels.make_standard_montage('biosemi64')
         channel_names_w_stim = self.channel_names.copy()
         channel_names_w_stim.append(self.stim_channel)
         channel_types_w_stim = self.channel_types.copy()
@@ -122,9 +138,9 @@ class SubjectData:
         info_no_stim = mne.create_info(self.channel_names, self.mat_srate, self.channel_types)
         self.raw_rest = mne.io.RawArray(self.mat_rest, info_no_stim)
         self.raw_rest.set_montage(montage)
-        orig_noise = self.mat_noise
         for i, noise_type in enumerate(self.noise_measurement_types):
-            self.raw_noise[noise_type] = mne.io.RawArray(orig_noise[i], info_no_stim)
+            self.mat_noise[i] = (self.mat_noise[i] - self.mat_noise[i].mean(axis=1, keepdims=True)) / scale
+            self.raw_noise[noise_type] = mne.io.RawArray(self.mat_noise[i], info_no_stim)
             self.raw_noise[noise_type].set_montage(montage)
     
     def get_epoch(self, which, tmin, tmax, reject_criteria=None, **kwargs):
