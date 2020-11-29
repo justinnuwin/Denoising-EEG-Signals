@@ -38,7 +38,7 @@ class SubjectData:
     
     noise_measurement_types = ['blinking', 'eye_up-down', 'eye_left-right', 'jaw', 'head_left-right']
 
-    def __init__(self, data_file_path):
+    def __init__(self, data_file_path, verbose=False):
         self.__data = {}
         self.raw_imagery_left = None
         self.raw_imagery_right = None
@@ -47,7 +47,7 @@ class SubjectData:
         self.raw_noise = {}
         self.raw_rest = None
         self.__demarshal_mat(data_file_path)
-        self.__generate_mne_raw()
+        self.__generate_mne_raw(verbose=verbose)
 
     def __getitem__(self, item):
         """To access the original fields from the dataset .mat files prepend 'mat_' to the field name"""
@@ -94,15 +94,19 @@ class SubjectData:
             else:
                 self.__data[field] = data
 
-    def __generate_mne_raw(self):
+    def __generate_mne_raw(self, verbose=None):
         """Generate MNE.Raw from EEG measurements"""
         # Note that the original dataset gives the raw ADC valus from the Biosemi Activetwo. The conversion rate is
         # 31.25nV/bit https://www.biosemi.com/activetwo_full_specs.htm
         scale = 31.25e-9
-        self.mat_imagery_left = (self.mat_imagery_left - self.mat_imagery_left.mean(axis=1, keepdims=True)) * scale
-        self.mat_imagery_right = (self.mat_imagery_right - self.mat_imagery_right.mean(axis=1, keepdims=True)) * scale
-        self.mat_movement_left = (self.mat_movement_left - self.mat_movement_left.mean(axis=1, keepdims=True)) * scale
-        self.mat_movement_right = (self.mat_movement_right - self.mat_movement_right.mean(axis=1, keepdims=True)) * scale
+#         self.mat_imagery_left = (self.mat_imagery_left - self.mat_imagery_left.mean(axis=1, keepdims=True)) * scale
+#         self.mat_imagery_right = (self.mat_imagery_right - self.mat_imagery_right.mean(axis=1, keepdims=True)) * scale
+#         self.mat_movement_left = (self.mat_movement_left - self.mat_movement_left.mean(axis=1, keepdims=True)) * scale
+#         self.mat_movement_right = (self.mat_movement_right - self.mat_movement_right.mean(axis=1, keepdims=True)) * scale
+        self.mat_imagery_left = self.mat_imagery_left * scale
+        self.mat_imagery_right = self.mat_imagery_right * scale
+        self.mat_movement_left = self.mat_movement_left * scale
+        self.mat_movement_right = self.mat_movement_right * scale
         self.mat_rest = (self.mat_rest - self.mat_rest.mean(axis=1, keepdims=True)) / scale
         # Noise is 0-meaned and converted to V below
         
@@ -122,43 +126,45 @@ class SubjectData:
         channel_types_w_stim.append('stim')
         info_w_stim = mne.create_info(channel_names_w_stim, self.mat_srate, channel_types_w_stim)
         self.raw_imagery_left = mne.io.RawArray(np.vstack((self.mat_imagery_left, self.mat_imagery_event)),
-                                                info_w_stim)
+                                                info_w_stim, verbose=verbose)
         self.raw_imagery_right = mne.io.RawArray(np.vstack((self.mat_imagery_right, self.mat_imagery_event)),
-                                                 info_w_stim)
+                                                 info_w_stim, verbose=verbose)
         self.raw_imagery_left.set_montage(montage)
         self.raw_imagery_right.set_montage(montage)
 
         self.raw_movement_left = mne.io.RawArray(np.vstack((self.mat_movement_left, self.mat_movement_event)),
-                                                 info_w_stim)
+                                                 info_w_stim, verbose=verbose)
         self.raw_movement_right = mne.io.RawArray(np.vstack((self.mat_movement_right, self.mat_movement_event)),
-                                                  info_w_stim)
+                                                  info_w_stim, verbose=verbose)
         self.raw_movement_left.set_montage(montage)
         self.raw_movement_right.set_montage(montage)
         
         info_no_stim = mne.create_info(self.channel_names, self.mat_srate, self.channel_types)
-        self.raw_rest = mne.io.RawArray(self.mat_rest, info_no_stim)
+        self.raw_rest = mne.io.RawArray(self.mat_rest, info_no_stim, verbose=verbose)
         self.raw_rest.set_montage(montage)
         for i, noise_type in enumerate(self.noise_measurement_types):
             self.mat_noise[i] = (self.mat_noise[i] - self.mat_noise[i].mean(axis=1, keepdims=True)) / scale
-            self.raw_noise[noise_type] = mne.io.RawArray(self.mat_noise[i], info_no_stim)
+            self.raw_noise[noise_type] = mne.io.RawArray(self.mat_noise[i], info_no_stim, verbose=verbose)
             self.raw_noise[noise_type].set_montage(montage)
     
-    def get_epoch(self, which, tmin, tmax, reject_criteria=None, **kwargs):
+    def get_epochs(self, which, tmin=-2, tmax=5, filter_freqs=(8, 30), reject_criteria={'eeg': 100e-6},
+                   filter_props=dict(picks=['eeg'], fir_design='firwin', skip_by_annotation='edge'),
+                   **kwargs):
         assert which in ['imagery_left', 'imagery_right', 'movement_left', 'movement_right']
-        if reject_criteria is None:
-            # Default from MNE Overview Tutorial
-            reject_criteria = dict(mag=4000e-15,     # 4000 fT
-                                   grad=4000e-13,    # 4000 fT/cm
-                                   eeg=150e-6,       # 150 µV
-                                   eog=250e-6)       # 250 µV
-        raw = getattr(self, 'raw_' + which)
-        if 'imagery' in which:
-            events = self.mat_imagery_event
-        elif 'movement' in which:
-            events = self.mat_movement_event
-        return mne.Epochs(raw, events, event_id=event_dict, tmin=-0.2, tmax=0.5,
-                          reject=reject_criteria, **kwargs)
-
+        # For tmin/tmax, note that each trial is 7 seconds: 2s before cue, cue @ t=0, stimulus for 3s, then 2s after          
+        attr = 'raw_' + which
+        raw = getattr(self, attr)
+        imagery_events = mne.find_events(raw, stim_channel=self.stim_channel)
+        epoch = mne.Epochs(raw, imagery_events, tmin=tmin, tmax=tmax, preload=True, **kwargs)
+        
+        if filter_freqs is not None:
+            epoch = epoch.filter(*filter_freqs, **filter_props)
+        
+        if reject_criteria is not None:
+            epoch = epoch.drop_bad(reject=reject_criteria)
+        
+        return epoch
+        
 
 if __name__ == '__main__':
     # Test usage of SubjectData class
