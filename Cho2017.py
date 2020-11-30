@@ -99,15 +99,11 @@ class SubjectData:
         # Note that the original dataset gives the raw ADC valus from the Biosemi Activetwo. The conversion rate is
         # 31.25nV/bit https://www.biosemi.com/activetwo_full_specs.htm
         scale = 31.25e-9
-#         self.mat_imagery_left = (self.mat_imagery_left - self.mat_imagery_left.mean(axis=1, keepdims=True)) * scale
-#         self.mat_imagery_right = (self.mat_imagery_right - self.mat_imagery_right.mean(axis=1, keepdims=True)) * scale
-#         self.mat_movement_left = (self.mat_movement_left - self.mat_movement_left.mean(axis=1, keepdims=True)) * scale
-#         self.mat_movement_right = (self.mat_movement_right - self.mat_movement_right.mean(axis=1, keepdims=True)) * scale
         self.mat_imagery_left = self.mat_imagery_left * scale
         self.mat_imagery_right = self.mat_imagery_right * scale
         self.mat_movement_left = self.mat_movement_left * scale
         self.mat_movement_right = self.mat_movement_right * scale
-        self.mat_rest = (self.mat_rest - self.mat_rest.mean(axis=1, keepdims=True)) / scale
+        self.mat_rest = self.mat_rest * scale
         # Noise is 0-meaned and converted to V below
         
         # BCI2000 Electrode placement https://www.bci2000.org/mediawiki/index.php/User_Tutorial:EEG_Measurement_Setup
@@ -143,7 +139,7 @@ class SubjectData:
         self.raw_rest = mne.io.RawArray(self.mat_rest, info_no_stim, verbose=verbose)
         self.raw_rest.set_montage(montage)
         for i, noise_type in enumerate(self.noise_measurement_types):
-            self.mat_noise[i] = (self.mat_noise[i] - self.mat_noise[i].mean(axis=1, keepdims=True)) / scale
+            self.mat_noise[i] = self.mat_noise[i] * scale
             self.raw_noise[noise_type] = mne.io.RawArray(self.mat_noise[i], info_no_stim, verbose=verbose)
             self.raw_noise[noise_type].set_montage(montage)
     
